@@ -55,7 +55,7 @@ if __name__ == '__main__':
     args_for_python[-1] = ' '.join(kwargs)
     echo(f'[final args_for_python]: {args_for_python}')
     
-    if args_for_this.num_nodes > 1: # distributed
+    if args_for_this.num_nodes > 1:  # distributed
         os.environ['NPROC_PER_NODE'] = str(args_for_this.ngpu_per_node)
         cmd = (
             f'python3 -m torch.distributed.launch'
@@ -69,7 +69,7 @@ if __name__ == '__main__':
         )
     else:                           # single machine with multiple GPUs
         cmd = (
-            f'python3 -m torch.distributed.launch'
+            f'torchrun'
             f' --nproc_per_node={args_for_this.ngpu_per_node}'
             f' --master_port={__find_free_port()}'
             f' {args_for_this.main_py_relpath}'
