@@ -12,8 +12,8 @@ from timm.models.layers import DropPath
 _cur_active: torch.Tensor = None            # B1ff
 # todo: try to use `gather` for speed?
 def _get_active_ex_or_ii(H, returning_active_ex=True):
-    downsample_raito = H // _cur_active.shape[-1]
-    active_ex = _cur_active.repeat_interleave(downsample_raito, 2).repeat_interleave(downsample_raito, 3)
+    downsample_ratio = H // _cur_active.shape[-2]
+    active_ex = _cur_active.repeat_interleave(downsample_ratio, 2).repeat_interleave(downsample_ratio, 3)
     return active_ex if returning_active_ex else active_ex.squeeze(1).nonzero(as_tuple=True)  # ii: bi, hi, wi
 
 
