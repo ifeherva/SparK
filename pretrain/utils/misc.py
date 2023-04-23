@@ -53,7 +53,7 @@ def _set_print_only_on_master_proc(is_master):
     
     builtin_print = __builtin__.print
     
-    def prt(msg, *args, **kwargs):
+    def prt(msg='', file=None, *args, **kwargs):
         force = kwargs.pop('force', False)
         clean = kwargs.pop('clean', False)
         deeper = kwargs.pop('deeper', False)
@@ -64,7 +64,7 @@ def _set_print_only_on_master_proc(is_master):
                     f_back = f_back.f_back
                 file_desc = f'{f_back.f_code.co_filename:24s}'[-24:]
                 msg = f'{time_str()} ({file_desc}, line{f_back.f_lineno:-4d})=> {msg}'
-            builtin_print(msg, *args, **kwargs)
+            builtin_print(msg, file=file, *args, **kwargs)
     
     __builtin__.print = prt
 
@@ -134,10 +134,12 @@ class TensorboardLogger(object):
             self.writer.add_image(tag, img, step, dataformats=dataformats)
     
     def flush(self):
-        if self.is_master: self.writer.flush()
+        if self.is_master:
+            self.writer.flush()
     
     def close(self):
-        if self.is_master: self.writer.close()
+        if self.is_master:
+            self.writer.close()
 
 
 def save_checkpoint(save_to, args, epoch, performance_desc, model_without_ddp_state, optimizer_state):

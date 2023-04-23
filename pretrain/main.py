@@ -14,6 +14,7 @@ from typing import List
 import torch
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 import dist
 import encoder
@@ -50,6 +51,7 @@ def main_pt():
             shuffle=True, filling=True, rank=dist.get_rank(), world_size=dist.get_world_size(),
         ), worker_init_fn=worker_init_fn
     )
+    print('Dataset size {}'.format(len(dataset_train)))
     itrt_train, iters_train = iter(data_loader_train), len(data_loader_train)
     print(f'[dataloader] gbs={args.glb_batch_size}, lbs={args.batch_size_per_gpu}, iters_train={iters_train}')
     
@@ -78,7 +80,7 @@ def main_pt():
     
     # try to resume
     ep_start, performance_desc = misc.load_checkpoint(args.resume_from, model_without_ddp, optimizer)
-    if ep_start >= args.ep: # load from a complete checkpoint file
+    if ep_start >= args.ep:  # load from a complete checkpoint file
         print(f'  [*] [PT already done]    Min/Last Recon Loss: {performance_desc}')
     else:   # perform pre-training
         tb_lg = misc.TensorboardLogger(args.tb_lg_dir, is_master=dist.is_master(), prefix='pt')
@@ -86,7 +88,7 @@ def main_pt():
         print(f'[PT start] from ep{ep_start}')
         
         pt_start_time = time.time()
-        for ep in range(ep_start, args.ep):
+        for ep in tqdm(range(ep_start, args.ep)):
             ep_start_time = time.time()
             tb_lg.set_step(ep * iters_train)
             if hasattr(itrt_train, 'set_epoch'):
@@ -141,7 +143,7 @@ def pre_train_one_ep(ep, args: arg_util.Args, tb_lg: misc.TensorboardLogger, itr
     if early_clipping:
         params_req_grad = [p for p in model.parameters() if p.requires_grad]
     
-    for it, (inp, _) in enumerate(me.log_every(iters_train, itrt_train, 3, header)):
+    for it, (inp) in tqdm(enumerate(me.log_every(iters_train, itrt_train, 3, header)), desc='Epoch {}'.format(ep), total=iters_train):
         # adjust lr and wd
         min_lr, max_lr, min_wd, max_wd = lr_wd_annealing(optimizer, args.lr, args.wd, args.wde, it + ep * iters_train, args.wp_ep * iters_train, args.ep * iters_train)
         
