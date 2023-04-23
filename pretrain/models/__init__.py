@@ -13,6 +13,7 @@ from timm.models.layers import drop
 from models.convnext import ConvNeXt
 from models.resnet import ResNet
 from models.custom import YourConvNet
+from models.tocg_encoder import Encoder
 _import_resnets_for_timm_registration = (ResNet,)
 
 
@@ -40,6 +41,8 @@ pretrain_default_model_kwargs = {
     'convnext_small': dict(sparse=True, drop_path_rate=0.2),
     'convnext_base': dict(sparse=True, drop_path_rate=0.3),
     'convnext_large': dict(sparse=True, drop_path_rate=0.4),
+    # Viton models
+    'tocg_cloth_encoder': dict(in_channels=4, ngf=96)
 }
 for kw in pretrain_default_model_kwargs.values():
     kw['pretrained'] = False
