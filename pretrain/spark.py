@@ -23,11 +23,11 @@ class SparK(nn.Module):
             mask_ratio=0.6, densify_norm='bn', sbn=False,
     ):
         super().__init__()
-        input_size, downsample_raito = sparse_encoder.input_size, sparse_encoder.downsample_raito
-        self.downsample_raito = downsample_raito
-        self.fmap_size = input_size // downsample_raito
+        input_size, downsample_ratio = sparse_encoder.input_size, sparse_encoder.downsample_raito
+        self.downsample_ratio = downsample_ratio
+        self.fmap_size = [x // downsample_ratio for x in input_size]
         self.mask_ratio = mask_ratio
-        self.len_keep = round(self.fmap_size * self.fmap_size * (1 - mask_ratio))
+        self.len_keep = round(self.fmap_size[0] * self.fmap_size[1] * (1 - mask_ratio))
         
         self.sparse_encoder = sparse_encoder
         self.dense_decoder = dense_decoder
@@ -77,21 +77,21 @@ class SparK(nn.Module):
         s = torch.tensor(IMAGENET_DEFAULT_STD).view(1, 3, 1, 1)
         self.register_buffer('imn_m', m)
         self.register_buffer('imn_s', s)
-        self.register_buffer('norm_black', torch.zeros(1, 3, input_size, input_size))
+        self.register_buffer('norm_black', torch.zeros(1, 3, input_size[0], input_size[1]))
         self.vis_active = self.vis_active_ex = self.vis_inp = self.vis_inp_mask = ...
     
-    def mask(self, B: int, device, generator=None):
-        f: int = self.fmap_size
-        idx = torch.rand(B, f * f, generator=generator).argsort(dim=1)
+    def mask(self, B: int, device, generator=None) -> torch.BoolTensor:
+        fh, fw = self.fmap_size
+        idx = torch.rand(B, fh * fw, generator=generator).argsort(dim=1)
         idx = idx[:, :self.len_keep].to(device)  # (B, len_keep)
-        return torch.zeros(B, f * f, dtype=torch.bool, device=device).scatter_(dim=1, index=idx, value=True).view(B, 1, f, f)
+        return torch.zeros(B, fh * fw, dtype=torch.bool, device=device).scatter_(dim=1, index=idx, value=True).view(B, 1, fh, fw)
     
     def forward(self, inp_bchw: torch.Tensor, active_b1ff=None, vis=False):
         # step1. Mask
         if active_b1ff is None:     # rand mask
-            active_b1ff: torch.BoolTensor = self.mask(inp_bchw.shape[0], inp_bchw.device)  # (B, 1, f, f)
+            active_b1ff = self.mask(inp_bchw.shape[0], inp_bchw.device)  # (B, 1, f, f)
         encoder._cur_active = active_b1ff    # (B, 1, f, f)
-        active_b1hw = active_b1ff.repeat_interleave(self.downsample_raito, 2).repeat_interleave(self.downsample_raito, 3)  # (B, 1, H, W)
+        active_b1hw = active_b1ff.repeat_interleave(self.downsample_ratio, 2).repeat_interleave(self.downsample_ratio, 3)  # (B, 1, H, W)
         masked_bchw = inp_bchw * active_b1hw
         
         # step2. Encode: get hierarchical encoded sparse features (a list containing 4 feature maps at 4 scales)
@@ -130,8 +130,8 @@ class SparK(nn.Module):
             return recon_loss
     
     def patchify(self, bchw):
-        p = self.downsample_raito
-        h = w = self.fmap_size
+        p = self.downsample_ratio
+        h, w = self.fmap_size
         B, C = bchw.shape[:2]
         bchw = bchw.reshape(shape=(B, C, h, p, w, p))
         bchw = torch.einsum('bchpwq->bhwpqc', bchw)
@@ -139,7 +139,7 @@ class SparK(nn.Module):
         return bln
     
     def unpatchify(self, bln):
-        p = self.downsample_raito
+        p = self.downsample_ratio
         h = w = self.fmap_size
         B, C = bln.shape[0], bln.shape[-1] // p ** 2
         bln = bln.reshape(shape=(B, h, w, p, p, C))

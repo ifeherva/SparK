@@ -55,7 +55,7 @@ def main_pt():
     
     # build encoder and decoder
     enc: encoder.SparseEncoder = build_sparse_encoder(args.model, input_size=args.input_size, sbn=args.sbn, drop_path_rate=args.dp, verbose=False)
-    dec = LightDecoder(enc.downsample_raito, sbn=args.sbn)
+    dec = LightDecoder(enc.downsample_raito, sbn=args.sbn, out_channels=out_channels)
     model_without_ddp = SparK(
         sparse_encoder=enc, dense_decoder=dec, mask_ratio=args.mask,
         densify_norm=args.densify_norm, sbn=args.sbn,
