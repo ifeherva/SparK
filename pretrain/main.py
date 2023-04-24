@@ -20,10 +20,11 @@ import dist
 import encoder
 from decoder import LightDecoder
 from models import build_sparse_encoder
+from pretrain.utils.imagenet import build_imagenet_dataset_to_pretrain
+from utils.vitonset import build_viton_cloths
 from sampler import DistInfiniteBatchSampler, worker_init_fn
 from spark import SparK
 from utils import arg_util, misc, lamb
-from utils.imagenet import build_dataset_to_pretrain
 from utils.lr_control import lr_wd_annealing, get_param_groups
 
 
@@ -36,14 +37,21 @@ class LocalDDP(torch.nn.Module):
         return self.module(*args, **kwargs)
 
 
+DATASETS = {
+    'imagenet1k': build_imagenet_dataset_to_pretrain,
+    'viton-cloth': build_viton_cloths,
+}
+
+
 def main_pt():
     args: arg_util.Args = arg_util.init_dist_and_get_args()
     print(f'initial args:\n{str(args)}')
     args.log_epoch()
     
     # build data
-    print(f'[build data for pre-training] ...\n')
-    dataset_train = build_dataset_to_pretrain(args.data_path, args.input_size)
+    print(f'[build {args.dataset} data for pre-training] ...\n')
+    dataset_train = DATASETS[args.dataset](args.data_path, args.input_size)
+    out_channels = dataset_train.__getattribute__('in_channels') if hasattr(dataset_train, 'in_channels') else 3
     data_loader_train = DataLoader(
         dataset=dataset_train, num_workers=args.dataloader_workers, pin_memory=True,
         batch_sampler=DistInfiniteBatchSampler(
@@ -62,12 +70,14 @@ def main_pt():
         sparse_encoder=enc, dense_decoder=dec, mask_ratio=args.mask,
         densify_norm=args.densify_norm, sbn=args.sbn,
     ).to(args.device)
-    print(f'[PT model] model = {model_without_ddp}\n')
+
+    # print(f'[PT model] model = {model_without_ddp}\n')
     if dist.initialized():
         model: DistributedDataParallel = DistributedDataParallel(model_without_ddp, device_ids=[dist.get_local_rank()], find_unused_parameters=False, broadcast_buffers=False)
     else:
         model = LocalDDP(model_without_ddp)
-    
+
+    # model = torch.compile(model, backend="inductor")
     # build optimizer and lr_scheduler
     param_groups: List[dict] = get_param_groups(model_without_ddp, nowd_keys={'cls_token', 'pos_embed', 'mask_token', 'gamma'})
     opt_clz = {
@@ -99,7 +109,7 @@ def main_pt():
             min_loss = min(min_loss, last_loss)
             performance_desc = f'{min_loss:.4f} {last_loss:.4f}'
             misc.save_checkpoint(f'{args.model}_still_pretraining.pth', args, ep, performance_desc, model_without_ddp.state_dict(with_config=True), optimizer.state_dict())
-            misc.save_checkpoint_for_finetune(f'{args.model}_1kpretrained.pth', args, model_without_ddp.sparse_encoder.sp_cnn.state_dict())
+            misc.save_checkpoint_for_finetune(f'{args.model}_pretrained.pth', args, model_without_ddp.sparse_encoder.sp_cnn.state_dict())
             
             ep_cost = round(time.time() - ep_start_time, 2) + 1    # +1s: approximate the following logging cost
             remain_secs = (args.ep-1 - ep) * ep_cost

@@ -40,7 +40,6 @@ class VitonClothDataset(Dataset):
         self.normalize = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         self.in_channels = 4
 
-
         def valid_dresscode_cloth(x):
             return x.lower().endswith('_1.jpg')
 

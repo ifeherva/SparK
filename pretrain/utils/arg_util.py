@@ -7,10 +7,18 @@
 import json
 import os
 import sys
+from typing import Union, List
 
 from tap import Tap
 
 import dist
+
+
+def to_list(string: str) -> List[int]:
+    items = string.split(',')
+    if len(items) == 0:
+        return [int(items), int(items)]
+    return [int(x) for x in items]
 
 
 class Args(Tap):
@@ -19,13 +27,14 @@ class Args(Tap):
     exp_dir: str = 'your_exp_dir'   # will be created if not exists
     data_path: str = 'imagenet_data_path'
     resume_from: str = ''   # resume from some checkpoint.pth
+    dataset: str = 'viton-cloth'
     
     # SparK hyperparameters
     mask: float = 0.6   # mask ratio, should be in (0, 1)
     
     # encoder hyperparameters
     model: str = 'resnet50'
-    input_size: int = 224
+    input_size: List[int] = [224, 224]
     sbn: bool = True
     
     # data hyperparameters
@@ -89,6 +98,9 @@ class Args(Tap):
                 'rema': self.remain_time, 'fini': self.finish_time,
             }, fp)
             fp.write('\n')
+
+    def configure(self) -> None:
+        self.add_argument('--input_size', type=to_list)
 
 
 def init_dist_and_get_args():

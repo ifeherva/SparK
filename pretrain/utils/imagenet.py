@@ -42,7 +42,8 @@ class ImageNetDataset(DatasetFolder):
             extensions=IMG_EXTENSIONS if is_valid_file is None else None,
             transform=transform, target_transform=None, is_valid_file=is_valid_file
         )
-        
+
+        self.in_channels = 3
         self.samples = tuple(self.samples)
         self.targets = tuple([s[1] for s in self.samples])
     
@@ -51,7 +52,7 @@ class ImageNetDataset(DatasetFolder):
         return self.transform(self.loader(path)), target
 
 
-def build_dataset_to_pretrain(dataset_path, input_size) -> Dataset:
+def build_imagenet_dataset_to_pretrain(dataset_path, input_size) -> Dataset:
     """
     You may need to modify this function to fit your own dataset.
     :param dataset_path: the folder of dataset
