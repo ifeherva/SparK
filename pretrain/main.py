@@ -20,8 +20,8 @@ import dist
 import encoder
 from decoder import LightDecoder
 from models import build_sparse_encoder
-from pretrain.utils.imagenet import build_imagenet_dataset_to_pretrain
-from utils.vitonset import build_viton_cloths
+from utils.imagenet import build_imagenet_dataset_to_pretrain
+from utils.vitonset import build_viton_cloths, build_viton_pose
 from sampler import DistInfiniteBatchSampler, worker_init_fn
 from spark import SparK
 from utils import arg_util, misc, lamb
@@ -40,6 +40,7 @@ class LocalDDP(torch.nn.Module):
 DATASETS = {
     'imagenet1k': build_imagenet_dataset_to_pretrain,
     'viton-cloth': build_viton_cloths,
+    'viton-pose': build_viton_pose,
 }
 
 
@@ -50,7 +51,7 @@ def main_pt():
     
     # build data
     print(f'[build {args.dataset} data for pre-training] ...\n')
-    dataset_train = DATASETS[args.dataset](args.data_path, args.input_size)
+    dataset_train = DATASETS[args.dataset](args.data_path, args.input_size, shrink_labels=args.shrink_labels)
     out_channels = dataset_train.__getattribute__('in_channels') if hasattr(dataset_train, 'in_channels') else 3
     data_loader_train = DataLoader(
         dataset=dataset_train, num_workers=args.dataloader_workers, pin_memory=True,
@@ -64,7 +65,8 @@ def main_pt():
     print(f'[dataloader] gbs={args.glb_batch_size}, lbs={args.batch_size_per_gpu}, iters_train={iters_train}')
     
     # build encoder and decoder
-    enc: encoder.SparseEncoder = build_sparse_encoder(args.model, input_size=args.input_size, sbn=args.sbn, drop_path_rate=args.dp, verbose=False)
+    enc: encoder.SparseEncoder = build_sparse_encoder(args.model, input_size=args.input_size,
+                                                      sbn=args.sbn, drop_path_rate=args.dp, verbose=False)
     dec = LightDecoder(enc.downsample_raito, sbn=args.sbn, out_channels=out_channels)
     model_without_ddp = SparK(
         sparse_encoder=enc, dense_decoder=dec, mask_ratio=args.mask,
@@ -77,7 +79,7 @@ def main_pt():
     else:
         model = LocalDDP(model_without_ddp)
 
-    # model = torch.compile(model, backend="inductor")
+    model = torch.compile(model, backend="inductor")
     # build optimizer and lr_scheduler
     param_groups: List[dict] = get_param_groups(model_without_ddp, nowd_keys={'cls_token', 'pos_embed', 'mask_token', 'gamma'})
     opt_clz = {
@@ -93,7 +95,8 @@ def main_pt():
     if ep_start >= args.ep:  # load from a complete checkpoint file
         print(f'  [*] [PT already done]    Min/Last Recon Loss: {performance_desc}')
     else:   # perform pre-training
-        tb_lg = misc.TensorboardLogger(args.tb_lg_dir, is_master=dist.is_master(), prefix='pt')
+        #tb_lg = misc.TensorboardLogger(args.tb_lg_dir, is_master=dist.is_master(), prefix='pt')
+        tb_lg = misc.WandbLogger(args, is_master=dist.is_master())
         min_loss = 1e9
         print(f'[PT start] from ep{ep_start}')
         
@@ -141,7 +144,8 @@ def main_pt():
     args.log_epoch()
 
 
-def pre_train_one_ep(ep, args: arg_util.Args, tb_lg: misc.TensorboardLogger, itrt_train, iters_train, model: DistributedDataParallel, optimizer):
+def pre_train_one_ep(ep, args: arg_util.Args, tb_lg: misc.WandbLogger, itrt_train, iters_train,
+                     model: DistributedDataParallel, optimizer):
     model.train()
     me = misc.MetricLogger(delimiter='  ')
     me.add_meter('max_lr', misc.SmoothedValue(window_size=1, fmt='{value:.5f}'))
@@ -170,9 +174,11 @@ def pre_train_one_ep(ep, args: arg_util.Args, tb_lg: misc.TensorboardLogger, itr
         
         # optimize
         grad_norm = None
-        if early_clipping: grad_norm = torch.nn.utils.clip_grad_norm_(params_req_grad, args.clip).item()
+        if early_clipping:
+            grad_norm = torch.nn.utils.clip_grad_norm_(params_req_grad, args.clip).item()
         optimizer.step()
-        if late_clipping: grad_norm = optimizer.global_grad_norm
+        if late_clipping:
+            grad_norm = optimizer.global_grad_norm
         torch.cuda.synchronize()
         
         # log

@@ -76,6 +76,16 @@ def tocg_cloth_encoder(pretrained=False, in_channels=4, ngf=96, **kwargs):
     return Encoder(in_channels=in_channels, ngf=ngf)
 
 
+@register_model
+def tocg_pose_encoder(pretrained=False, in_channels=21, ngf=96, **kwargs):
+    return Encoder(in_channels=in_channels, ngf=ngf)
+
+
+@register_model
+def tocg_pose_encoder_shrunk(pretrained=False, in_channels=14, ngf=96, **kwargs):
+    return Encoder(in_channels=in_channels, ngf=ngf)
+
+
 if __name__ == '__main__':
     from timm.models import create_model
 

@@ -3,6 +3,7 @@
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
+from typing import Tuple
 
 import torch
 from timm import create_model
@@ -42,7 +43,9 @@ pretrain_default_model_kwargs = {
     'convnext_base': dict(sparse=True, drop_path_rate=0.3),
     'convnext_large': dict(sparse=True, drop_path_rate=0.4),
     # Viton models
-    'tocg_cloth_encoder': dict(in_channels=4, ngf=96)
+    'tocg_cloth_encoder': dict(in_channels=4, ngf=96),
+    'tocg_pose_encoder': dict(in_channels=21, ngf=96),
+    'tocg_pose_encoder_shrunk': dict(in_channels=14, ngf=96),
 }
 for kw in pretrain_default_model_kwargs.values():
     kw['pretrained'] = False
@@ -50,7 +53,7 @@ for kw in pretrain_default_model_kwargs.values():
     kw['global_pool'] = ''
 
 
-def build_sparse_encoder(name: str, input_size: int, sbn=False, drop_path_rate=0.0, verbose=False):
+def build_sparse_encoder(name: str, input_size: Tuple[int, int], sbn=False, drop_path_rate=0.0, verbose=False):
     from encoder import SparseEncoder
     
     kwargs = pretrain_default_model_kwargs[name]

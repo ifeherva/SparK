@@ -7,7 +7,7 @@
 import json
 import os
 import sys
-from typing import Union, List
+from typing import Union, List, Tuple
 
 from tap import Tap
 
@@ -28,13 +28,15 @@ class Args(Tap):
     data_path: str = 'imagenet_data_path'
     resume_from: str = ''   # resume from some checkpoint.pth
     dataset: str = 'viton-cloth'
+    shrink_labels: bool = False
+    run_name: str = None
     
     # SparK hyperparameters
     mask: float = 0.6   # mask ratio, should be in (0, 1)
     
     # encoder hyperparameters
     model: str = 'resnet50'
-    input_size: List[int] = [224, 224]
+    input_size: Tuple[int, int] = [224, 224]
     sbn: bool = True
     
     # data hyperparameters

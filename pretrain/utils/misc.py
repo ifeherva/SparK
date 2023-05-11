@@ -16,6 +16,7 @@ from typing import Iterator
 import numpy as np
 import pytz
 import torch
+import wandb
 from torch.utils.tensorboard import SummaryWriter
 
 import dist
@@ -44,8 +45,8 @@ def init_distributed_environ(exp_dir):
     cudnn.deterministic = False
     
     _set_print_only_on_master_proc(is_master=dist.is_local_master())
-    if dist.is_local_master() and len(exp_dir):
-        sys.stdout, sys.stderr = _SyncPrintToFile(exp_dir, stdout=True), _SyncPrintToFile(exp_dir, stdout=False)
+    #if dist.is_local_master() and len(exp_dir):
+    #    sys.stdout, sys.stderr = _SyncPrintToFile(exp_dir, stdout=True), _SyncPrintToFile(exp_dir, stdout=False)
 
 
 def _set_print_only_on_master_proc(is_master):
@@ -140,6 +141,70 @@ class TensorboardLogger(object):
     def close(self):
         if self.is_master:
             self.writer.close()
+
+
+class WandbLogger(object):
+    def __init__(self, opt, is_master, prefix='pt'):
+        self.is_master = is_master
+        self.step = 0
+        self.prefix = prefix
+        self.log_freq = 300
+
+        wandb.init(
+            project="TOCG Pretrain",
+            entity='ifeherva',
+            config=opt,
+            name=opt.run_name,
+        )
+
+    def set_step(self, step=None):
+        if step is not None:
+            self.step = step
+        else:
+            self.step += 1
+
+    def get_loggable(self, step=None):
+        if step is None:  # iter wise
+            step = self.step
+            loggable = step % self.log_freq == 0
+        else:  # epoch wise
+            loggable = True
+        return step, (loggable and self.is_master)
+
+    def update(self, head='scalar', step=None, **kwargs):
+        step, loggable = self.get_loggable(step)
+        if loggable:
+            head = f'{self.prefix}_{head}'
+            for k, v in kwargs.items():
+                if v is None:
+                    continue
+                if isinstance(v, torch.Tensor):
+                    v = v.item()
+                assert isinstance(v, (float, int))
+                if self.is_master:
+                    wandb.log({head + "/" + k: v}, step)
+
+    def log_distribution(self, tag, values, step=None):
+        step, loggable = self.get_loggable(step)
+        if loggable:
+            if not isinstance(values, torch.Tensor):
+                values = torch.tensor(values)
+            wandb.log({tag: wandb.Histogram(values.numpy())}, step=step)
+
+    def log_image(self, tag, img, step=None, dataformats='NCHW'):
+        step, loggable = self.get_loggable(step)
+        if loggable:
+            img = img.cpu().numpy()
+            if self.is_master:
+                wandb.log({tag: wandb.Image(img)}, step)
+
+    def flush(self):
+        if self.is_master:
+            pass
+
+    def close(self):
+        if self.is_master:
+            wandb.finish()
 
 
 def save_checkpoint(save_to, args, epoch, performance_desc, model_without_ddp_state, optimizer_state):
