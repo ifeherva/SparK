@@ -150,12 +150,13 @@ class WandbLogger(object):
         self.prefix = prefix
         self.log_freq = 300
 
-        wandb.init(
-            project="TOCG Pretrain",
-            entity='ifeherva',
-            config=opt,
-            name=opt.run_name,
-        )
+        if is_master:
+            wandb.init(
+                project="TOCG Pretrain",
+                entity='ifeherva',
+                config=opt,
+                name=opt.run_name,
+            )
 
     def set_step(self, step=None):
         if step is not None:
