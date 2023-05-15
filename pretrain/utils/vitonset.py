@@ -201,6 +201,7 @@ class VitonClothDataset(Dataset):
         # normalize
         img = self.normalize(transformed_images['image'].to(torch.float) / 255)
         mask = transformed_images['mask'].to(torch.float) / 255   # 0..1 float
+        mask = (mask > 0.5).to(torch.float)
 
         return torch.cat([img, mask], 0)
 
